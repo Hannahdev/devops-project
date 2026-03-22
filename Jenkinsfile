@@ -11,7 +11,6 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // FIXED: Added specific checkout timeout (30 mins) to handle slow connections
                 checkout([$class: 'GitSCM', 
                     branches: [[name: '*/main']], 
                     extensions: [
@@ -37,7 +36,6 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     bat """
-                        @echo off
                         powershell -Command "\$env:PASS | docker login -u \$env:USER --password-stdin"
                         docker build -t %DOCKERHUB_REPO%:latest .
                         docker push %DOCKERHUB_REPO%:latest
@@ -48,10 +46,19 @@ pipeline {
 
         stage('Deploy to Azure') {
             steps {
-                sshagent(['azure-ssh-key']) {
-                    bat """
-                        ssh -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && kubectl rollout status deployment/inventory-app"
-                    """
+                // We wrap this in a script block to catch errors and force output
+                script {
+                    sshagent(['azure-ssh-key']) {
+                        bat """
+                            @echo off
+                            echo --- Testing SSH Connection to %VM_IP% ---
+                            ssh -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && kubectl rollout status deployment/inventory-app"
+                            if %ERRORLEVEL% NEQ 0 (
+                                echo ERROR: SSH command failed with exit code %ERRORLEVEL%
+                                exit /b %ERRORLEVEL%
+                            )
+                        """
+                    }
                 }
             }
         }

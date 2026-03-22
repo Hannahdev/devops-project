@@ -11,6 +11,8 @@ pipeline {
         DOCKERHUB_REPO = 'hasnaeelmir/inventory-app'
         REPORT_DIR = 'reports'
         PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+        VM_IP = "20.199.176.237"  // Adresse de ta VM/master Kubernetes
+        VM_USER = "azureuser"      // Utilisateur pour SSH
     }
 
     stages {
@@ -48,9 +50,7 @@ pipeline {
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                         if (isUnix()) {
                             sh '''
-                                # Create .dockerignore on the fly
                                 echo "venv/\n.git/\n__pycache__/\nreports/" > .dockerignore
-                                
                                 echo $PASS | docker login -u $USER --password-stdin
                                 docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                                 docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
@@ -59,7 +59,6 @@ pipeline {
                         } else {
                             bat '''
                                 @echo off
-                                :: Create .dockerignore to shrink the build context (IMPORTANT)
                                 echo venv/ > .dockerignore
                                 echo .git/ >> .dockerignore
                                 echo __pycache__/ >> .dockerignore
@@ -70,8 +69,6 @@ pipeline {
 
                                 docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
                                 docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
-                                
-                                :: Try pushing the specific tag first, then latest
                                 docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:%IMAGE_TAG%
                                 docker push %DOCKERHUB_REPO%:%IMAGE_TAG%
                                 docker push %DOCKERHUB_REPO%:latest
@@ -83,41 +80,27 @@ pipeline {
         }
 
         stage('Deploy to Kubernetes') {
-    when { expression { params.DEPLOY } }
-    steps {
-        withCredentials([file(credentialsId: 'KUBE_CONFIG', variable: 'KUBECONFIG_FILE')]) {
-            script {
-                if (isUnix()) {
-                    sh '''
-                        mkdir -p ~/.kube
-                        cp "$KUBECONFIG_FILE" ~/.kube/config
-                        kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest
-                        kubectl rollout status deployment/inventory-app
-                    '''
-                } else {
-                    bat '''
-                        @echo off
-                        :: 1. Create the directory safely
-                        if not exist "%USERPROFILE%\\.kube" mkdir "%USERPROFILE%\\.kube"
-                        
-                        :: 2. Copy the config (using quotes for paths with spaces)
-                        copy /Y "%KUBECONFIG_FILE%" "%USERPROFILE%\\.kube\\config"
-                        
-                        :: 3. Set the config for this session
-                        set KUBECONFIG=%USERPROFILE%\\.kube\\config
-                        
-                        :: 4. Verify kubectl can see the cluster before trying to deploy
-                        kubectl cluster-info
-                        if errorlevel 1 (
-                            echo "ERROR: Could not connect to Kubernetes cluster."
-                            exit /b 1
-                        )
-
-                        :: 5. Update the image
-                        kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest
-                        kubectl rollout status deployment/inventory-app
-                    '''
-                }
+            when { expression { params.DEPLOY } }
+            steps {
+                // Utilisation de SSH pour accéder à la VM et copier kubeconfig
+                withCredentials([sshUserPrivateKey(credentialsId: 'azure-ssh-key', keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+                    script {
+                        if (isUnix()) {
+                            sh """
+                                ssh -o StrictHostKeyChecking=no -i $SSH_KEY $VM_USER@$VM_IP "mkdir -p ~/.kube"
+                                scp -i $SSH_KEY KubeConfig.yaml $VM_USER@$VM_IP:~/.kube/config
+                                ssh -i $SSH_KEY $VM_USER@$VM_IP "kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest"
+                                ssh -i $SSH_KEY $VM_USER@$VM_IP "kubectl rollout status deployment/inventory-app"
+                            """
+                        } else {
+                            bat """
+                                :: Windows PowerShell pour SSH
+                                powershell -Command "ssh -o StrictHostKeyChecking=no -i %SSH_KEY% %VM_USER%@%VM_IP% 'mkdir -p ~/.kube'"
+                                powershell -Command "scp -i %SSH_KEY% KubeConfig.yaml %VM_USER%@%VM_IP%:~/.kube/config"
+                                powershell -Command "ssh -i %SSH_KEY% %VM_USER%@%VM_IP% 'kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest'"
+                                powershell -Command "ssh -i %SSH_KEY% %VM_USER%@%VM_IP% 'kubectl rollout status deployment/inventory-app'"
+                            """
+                        }
                     }
                 }
             }

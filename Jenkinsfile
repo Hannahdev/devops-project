@@ -66,18 +66,21 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    // Correct use: 'USER' and 'PASS' are the VARIABLE NAMES for the script to use
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD')]) {
                         if (isUnix()) {
                             sh '''
-                                echo $PASS | docker login -u $USER --password-stdin
+                                docker logout >/dev/null 2>&1 || true
+                                printf "%s" "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
                                 docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                                 docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
                                 docker push ${DOCKERHUB_REPO}:latest
                             '''
                         } else {
                             bat '''
-                                echo %PASS% | docker login -u %USER% --password-stdin
+                                @echo off
+                                docker logout >NUL 2>&1
+                                powershell -NoProfile -Command "$env:DOCKERHUB_PASSWORD | docker login -u $env:DOCKERHUB_USERNAME --password-stdin"
+                                if errorlevel 1 exit /b 1
                                 docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
                                 docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
                                 docker push %DOCKERHUB_REPO%:latest

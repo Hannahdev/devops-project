@@ -5,15 +5,10 @@ pipeline {
         booleanParam(name: 'DEPLOY', defaultValue: true, description: 'Deploy to Kubernetes')
     }
 
-    options {
-        disableConcurrentBuilds()
-        timestamps()
-    }
-
     environment {
         IMAGE_NAME = 'inventory-app'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        DOCKERHUB_REPO = 'hasnaeelmir/inventory-app' // 🔥 change if needed
+        DOCKERHUB_REPO = 'hasnaeelmir/inventory-app'
         REPORT_DIR = 'reports'
         PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
@@ -25,7 +20,7 @@ pipeline {
         // -----------------------------
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/tonrepo/inventory-app.git'
             }
         }
 
@@ -107,14 +102,14 @@ pipeline {
                     if (isUnix()) {
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                             sh '''
-                                echo $PASS | docker login -u $USER --password-stdin
+                                docker login -u $USER -p $PASS
                                 docker push ${DOCKERHUB_REPO}:latest
                             '''
                         }
                     } else {
                         withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                             bat '''
-                                echo %PASS% | docker login -u %USER% --password-stdin
+                                docker login -u %USER% -p %PASS%
                                 docker push %DOCKERHUB_REPO%:latest
                             '''
                         }
@@ -124,24 +119,40 @@ pipeline {
         }
 
         // -----------------------------
-        // 6. Deploy to Kubernetes
+        // 6. Deploy to Kubernetes (Azure VM)
         // -----------------------------
         stage('Deploy to Kubernetes') {
             when {
                 expression { params.DEPLOY }
             }
             steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            kubectl apply -f deployment.yaml
-                            kubectl apply -f service.yaml
-                        '''
-                    } else {
-                        bat '''
-                            kubectl apply -f deployment.yaml
-                            kubectl apply -f service.yaml
-                        '''
+                withCredentials([file(credentialsId: 'KUBE_CONFIG', variable: 'KUBECONFIG_FILE')]) {
+                    script {
+                        if (isUnix()) {
+                            sh '''
+                                mkdir -p ~/.kube
+                                cp $KUBECONFIG_FILE ~/.kube/config
+                                export KUBECONFIG=~/.kube/config
+
+                                kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest --record
+                                kubectl rollout status deployment/inventory-app
+
+                                kubectl get pods
+                                kubectl get svc
+                            '''
+                        } else {
+                            bat '''
+                                mkdir %USERPROFILE%\\.kube
+                                copy %KUBECONFIG_FILE% %USERPROFILE%\\.kube\\config
+                                set KUBECONFIG=%USERPROFILE%\\.kube\\config
+
+                                kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest --record
+                                kubectl rollout status deployment/inventory-app
+
+                                kubectl get pods
+                                kubectl get svc
+                            '''
+                        }
                     }
                 }
             }

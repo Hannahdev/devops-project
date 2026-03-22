@@ -1,6 +1,6 @@
 # 🚀 Inventory App
 
-A modern, visually stunning inventory management web application built with **Flask** and a **glassmorphism + antigravity** UI. Includes full **Docker** containerization and a **Jenkins CI/CD** pipeline.
+A modern, visually stunning inventory management web application built with **Flask** and a **glassmorphism** UI. Includes full **Docker** containerization and a **Jenkins CI/CD** pipeline.
 
 > Perfect for DevOps academic presentations and learning modern web development patterns.
 

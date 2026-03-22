@@ -10,7 +10,6 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         DOCKERHUB_REPO = 'hasnaeelmir/inventory-app'
         REPORT_DIR = 'reports'
-        // TIP: It is better to have Python in the system PATH, but keeping your path if needed:
         PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
 
@@ -66,11 +65,11 @@ pipeline {
         stage('Docker Build & Push') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'DOCKERHUB_USERNAME', passwordVariable: 'DOCKERHUB_PASSWORD')]) {
+                    // USER and PASS are the labels Jenkins uses to map your saved credentials
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                         if (isUnix()) {
                             sh '''
-                                docker logout >/dev/null 2>&1 || true
-                                printf "%s" "$DOCKERHUB_PASSWORD" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+                                echo $PASS | docker login -u $USER --password-stdin
                                 docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                                 docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
                                 docker push ${DOCKERHUB_REPO}:latest
@@ -78,9 +77,8 @@ pipeline {
                         } else {
                             bat '''
                                 @echo off
-                                docker logout >NUL 2>&1
-                                powershell -NoProfile -Command "$env:DOCKERHUB_PASSWORD | docker login -u $env:DOCKERHUB_USERNAME --password-stdin"
-                                if errorlevel 1 exit /b 1
+                                :: Use PowerShell to safely pipe the password/token on Windows
+                                powershell -Command "$env:PASS | docker login -u $env:USER --password-stdin"
                                 docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
                                 docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
                                 docker push %DOCKERHUB_REPO%:latest

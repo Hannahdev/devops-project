@@ -11,10 +11,13 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // FIXED: Using shallow clone to prevent RPC/Timeout errors
+                // FIXED: Added specific checkout timeout (30 mins) to handle slow connections
                 checkout([$class: 'GitSCM', 
                     branches: [[name: '*/main']], 
-                    extensions: [[$class: 'CloneOption', depth: 1, noTags: false, shallow: true]], 
+                    extensions: [
+                        [$class: 'CloneOption', depth: 1, noTags: false, shallow: true, timeout: 30],
+                        [$class: 'CheckoutOption', timeout: 30]
+                    ], 
                     userRemoteConfigs: [[url: 'https://github.com/Hannahdev/devops-project.git']]
                 ])
             }
@@ -34,6 +37,7 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     bat """
+                        @echo off
                         powershell -Command "\$env:PASS | docker login -u \$env:USER --password-stdin"
                         docker build -t %DOCKERHUB_REPO%:latest .
                         docker push %DOCKERHUB_REPO%:latest
@@ -44,7 +48,6 @@ pipeline {
 
         stage('Deploy to Azure') {
             steps {
-                // Requires the 'SSH Agent' plugin to be installed in Jenkins
                 sshagent(['azure-ssh-key']) {
                     bat """
                         ssh -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && kubectl rollout status deployment/inventory-app"

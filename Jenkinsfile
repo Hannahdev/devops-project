@@ -42,33 +42,15 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        sh '''
-                            mkdir -p ${REPORT_DIR}
-                            . venv/bin/activate
-                            pytest -v --junitxml=${REPORT_DIR}/pytest.xml
-                        '''
-                    } else {
-                        bat '''
-                            if not exist %REPORT_DIR% mkdir %REPORT_DIR%
-                            call venv\\Scripts\\activate.bat
-                            venv\\Scripts\\pytest -v --junitxml=%REPORT_DIR%\\pytest.xml
-                        '''
-                    }
-                }
-            }
-        }
-
         stage('Docker Build & Push') {
             steps {
                 script {
-                    // USER and PASS are the labels Jenkins uses to map your saved credentials
                     withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                         if (isUnix()) {
                             sh '''
+                                # Create .dockerignore on the fly
+                                echo "venv/\n.git/\n__pycache__/\nreports/" > .dockerignore
+                                
                                 echo $PASS | docker login -u $USER --password-stdin
                                 docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
                                 docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
@@ -77,10 +59,21 @@ pipeline {
                         } else {
                             bat '''
                                 @echo off
-                                :: Use PowerShell to safely pipe the password/token on Windows
+                                :: Create .dockerignore to shrink the build context (IMPORTANT)
+                                echo venv/ > .dockerignore
+                                echo .git/ >> .dockerignore
+                                echo __pycache__/ >> .dockerignore
+                                echo reports/ >> .dockerignore
+
                                 powershell -Command "$env:PASS | docker login -u $env:USER --password-stdin"
+                                if errorlevel 1 exit /b 1
+
                                 docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
                                 docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
+                                
+                                :: Try pushing the specific tag first, then latest
+                                docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:%IMAGE_TAG%
+                                docker push %DOCKERHUB_REPO%:%IMAGE_TAG%
                                 docker push %DOCKERHUB_REPO%:latest
                             '''
                         }

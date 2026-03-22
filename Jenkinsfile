@@ -16,6 +16,7 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         CONTAINER_NAME = 'inventory-app-container'
         REPORT_DIR = 'reports'
+        PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
 
     stages {
@@ -37,10 +38,10 @@ pipeline {
                         '''
                     } else {
                         bat '''
-                            python -m venv venv
+                            "%PYTHON_PATH%" -m venv venv
                             call venv\\Scripts\\activate.bat
-                            python -m pip install --upgrade pip
-                            pip install -r requirements.txt
+                            venv\\Scripts\\python -m pip install --upgrade pip
+                            venv\\Scripts\\pip install -r requirements.txt
                         '''
                     }
                 }
@@ -60,7 +61,7 @@ pipeline {
                         bat '''
                             if not exist %REPORT_DIR% mkdir %REPORT_DIR%
                             call venv\\Scripts\\activate.bat
-                            pytest -v --junitxml=%REPORT_DIR%\\pytest.xml
+                            venv\\Scripts\\pytest -v --junitxml=%REPORT_DIR%\\pytest.xml
                         '''
                     }
                 }

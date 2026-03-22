@@ -83,27 +83,41 @@ pipeline {
         }
 
         stage('Deploy to Kubernetes') {
-            when { expression { params.DEPLOY } }
-            steps {
-                withCredentials([file(credentialsId: 'KUBE_CONFIG', variable: 'KUBECONFIG_FILE')]) {
-                    script {
-                        if (isUnix()) {
-                            sh '''
-                                mkdir -p ~/.kube
-                                cp $KUBECONFIG_FILE ~/.kube/config
-                                export KUBECONFIG=~/.kube/config
-                                kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest
-                                kubectl rollout status deployment/inventory-app
-                            '''
-                        } else {
-                            bat '''
-                                if not exist "%USERPROFILE%\\.kube" mkdir "%USERPROFILE%\\.kube"
-                                copy "%KUBECONFIG_FILE%" "%USERPROFILE%\\.kube\\config"
-                                set KUBECONFIG=%USERPROFILE%\\.kube\\config
-                                kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest
-                                kubectl rollout status deployment/inventory-app
-                            '''
-                        }
+    when { expression { params.DEPLOY } }
+    steps {
+        withCredentials([file(credentialsId: 'KUBE_CONFIG', variable: 'KUBECONFIG_FILE')]) {
+            script {
+                if (isUnix()) {
+                    sh '''
+                        mkdir -p ~/.kube
+                        cp "$KUBECONFIG_FILE" ~/.kube/config
+                        kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest
+                        kubectl rollout status deployment/inventory-app
+                    '''
+                } else {
+                    bat '''
+                        @echo off
+                        :: 1. Create the directory safely
+                        if not exist "%USERPROFILE%\\.kube" mkdir "%USERPROFILE%\\.kube"
+                        
+                        :: 2. Copy the config (using quotes for paths with spaces)
+                        copy /Y "%KUBECONFIG_FILE%" "%USERPROFILE%\\.kube\\config"
+                        
+                        :: 3. Set the config for this session
+                        set KUBECONFIG=%USERPROFILE%\\.kube\\config
+                        
+                        :: 4. Verify kubectl can see the cluster before trying to deploy
+                        kubectl cluster-info
+                        if errorlevel 1 (
+                            echo "ERROR: Could not connect to Kubernetes cluster."
+                            exit /b 1
+                        )
+
+                        :: 5. Update the image
+                        kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest
+                        kubectl rollout status deployment/inventory-app
+                    '''
+                }
                     }
                 }
             }

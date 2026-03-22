@@ -10,23 +10,17 @@ pipeline {
         IMAGE_TAG = "${env.BUILD_NUMBER}"
         DOCKERHUB_REPO = 'hasnaeelmir/inventory-app'
         REPORT_DIR = 'reports'
+        // TIP: It is better to have Python in the system PATH, but keeping your path if needed:
         PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
 
     stages {
-
-        // -----------------------------
-        // 1. Checkout
-        // -----------------------------
         stage('Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Hannahdev/devops-project.git'
             }
         }
 
-        // -----------------------------
-        // 2. Install Dependencies
-        // -----------------------------
         stage('Install Dependencies') {
             steps {
                 script {
@@ -49,9 +43,6 @@ pipeline {
             }
         }
 
-        // -----------------------------
-        // 3. Run Tests
-        // -----------------------------
         stage('Run Tests') {
             steps {
                 script {
@@ -72,44 +63,23 @@ pipeline {
             }
         }
 
-        // -----------------------------
-        // 4. Build Docker Image
-        // -----------------------------
-        stage('Build Docker Image') {
+        stage('Docker Build & Push') {
             steps {
                 script {
-                    if (isUnix()) {
-                        sh '''
-                            docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
-                        '''
-                    } else {
-                        bat '''
-                            docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
-                            docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
-                        '''
-                    }
-                }
-            }
-        }
-
-        // -----------------------------
-        // 5. Push to Docker Hub
-        // -----------------------------
-        stage('Push to DockerHub') {
-            steps {
-                script {
-                    if (isUnix()) {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                    // Correct use: 'USER' and 'PASS' are the VARIABLE NAMES for the script to use
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        if (isUnix()) {
                             sh '''
-                                docker login -u $USER -p $PASS
+                                echo $PASS | docker login -u $USER --password-stdin
+                                docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
+                                docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
                                 docker push ${DOCKERHUB_REPO}:latest
                             '''
-                        }
-                    } else {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        } else {
                             bat '''
-                                docker login -u %USER% -p %PASS%
+                                echo %PASS% | docker login -u %USER% --password-stdin
+                                docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
+                                docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
                                 docker push %DOCKERHUB_REPO%:latest
                             '''
                         }
@@ -118,13 +88,8 @@ pipeline {
             }
         }
 
-        // -----------------------------
-        // 6. Deploy to Kubernetes (Azure VM)
-        // -----------------------------
         stage('Deploy to Kubernetes') {
-            when {
-                expression { params.DEPLOY }
-            }
+            when { expression { params.DEPLOY } }
             steps {
                 withCredentials([file(credentialsId: 'KUBE_CONFIG', variable: 'KUBECONFIG_FILE')]) {
                     script {
@@ -133,24 +98,16 @@ pipeline {
                                 mkdir -p ~/.kube
                                 cp $KUBECONFIG_FILE ~/.kube/config
                                 export KUBECONFIG=~/.kube/config
-
-                                kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest --record
+                                kubectl set image deployment/inventory-app inventory-app=${DOCKERHUB_REPO}:latest
                                 kubectl rollout status deployment/inventory-app
-
-                                kubectl get pods
-                                kubectl get svc
                             '''
                         } else {
                             bat '''
-                                mkdir %USERPROFILE%\\.kube
-                                copy %KUBECONFIG_FILE% %USERPROFILE%\\.kube\\config
+                                if not exist "%USERPROFILE%\\.kube" mkdir "%USERPROFILE%\\.kube"
+                                copy "%KUBECONFIG_FILE%" "%USERPROFILE%\\.kube\\config"
                                 set KUBECONFIG=%USERPROFILE%\\.kube\\config
-
-                                kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest --record
+                                kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest
                                 kubectl rollout status deployment/inventory-app
-
-                                kubectl get pods
-                                kubectl get svc
                             '''
                         }
                     }

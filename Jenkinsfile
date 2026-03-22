@@ -20,7 +20,7 @@ pipeline {
         // -----------------------------
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/tonrepo/inventory-app.git'
+                git branch: 'main', url: 'https://github.com/Hannahdev/devops-project.git'
             }
         }
 
@@ -100,14 +100,14 @@ pipeline {
             steps {
                 script {
                     if (isUnix()) {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                             sh '''
                                 docker login -u $USER -p $PASS
                                 docker push ${DOCKERHUB_REPO}:latest
                             '''
                         }
                     } else {
-                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                             bat '''
                                 docker login -u %USER% -p %PASS%
                                 docker push %DOCKERHUB_REPO%:latest

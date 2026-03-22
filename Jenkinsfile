@@ -2,8 +2,7 @@ pipeline {
     agent any
 
     parameters {
-        booleanParam(name: 'DEPLOY', defaultValue: false, description: 'Deploy container after successful build (main branch only).')
-        string(name: 'APP_PORT', defaultValue: '5000', description: 'Host port for deployed container.')
+        booleanParam(name: 'DEPLOY', defaultValue: true, description: 'Deploy to Kubernetes')
     }
 
     options {
@@ -14,18 +13,25 @@ pipeline {
     environment {
         IMAGE_NAME = 'inventory-app'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
-        CONTAINER_NAME = 'inventory-app-container'
+        DOCKERHUB_REPO = 'hasnaeelmir/inventory-app' // 🔥 change if needed
         REPORT_DIR = 'reports'
         PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
 
     stages {
+
+        // -----------------------------
+        // 1. Checkout
+        // -----------------------------
         stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
+        // -----------------------------
+        // 2. Install Dependencies
+        // -----------------------------
         stage('Install Dependencies') {
             steps {
                 script {
@@ -33,7 +39,7 @@ pipeline {
                         sh '''
                             python3 -m venv venv
                             . venv/bin/activate
-                            python -m pip install --upgrade pip
+                            pip install --upgrade pip
                             pip install -r requirements.txt
                         '''
                     } else {
@@ -48,6 +54,9 @@ pipeline {
             }
         }
 
+        // -----------------------------
+        // 3. Run Tests
+        // -----------------------------
         stage('Run Tests') {
             steps {
                 script {
@@ -68,47 +77,72 @@ pipeline {
             }
         }
 
+        // -----------------------------
+        // 4. Build Docker Image
+        // -----------------------------
         stage('Build Docker Image') {
             steps {
                 script {
                     if (isUnix()) {
                         sh '''
                             docker build -t ${IMAGE_NAME}:${IMAGE_TAG} .
-                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest
+                            docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${DOCKERHUB_REPO}:latest
                         '''
                     } else {
                         bat '''
                             docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
-                            docker tag %IMAGE_NAME%:%IMAGE_TAG% %IMAGE_NAME%:latest
+                            docker tag %IMAGE_NAME%:%IMAGE_TAG% %DOCKERHUB_REPO%:latest
                         '''
                     }
                 }
             }
         }
 
-        stage('Deploy') {
-            when {
-                allOf {
-                    branch 'main'
-                    expression { params.DEPLOY }
+        // -----------------------------
+        // 5. Push to Docker Hub
+        // -----------------------------
+        stage('Push to DockerHub') {
+            steps {
+                script {
+                    if (isUnix()) {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                            sh '''
+                                echo $PASS | docker login -u $USER --password-stdin
+                                docker push ${DOCKERHUB_REPO}:latest
+                            '''
+                        }
+                    } else {
+                        withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
+                            bat '''
+                                echo %PASS% | docker login -u %USER% --password-stdin
+                                docker push %DOCKERHUB_REPO%:latest
+                            '''
+                        }
+                    }
                 }
+            }
+        }
+
+        // -----------------------------
+        // 6. Deploy to Kubernetes
+        // -----------------------------
+        stage('Deploy to Kubernetes') {
+            when {
+                expression { params.DEPLOY }
             }
             steps {
                 script {
                     if (isUnix()) {
                         sh '''
-                            docker stop ${CONTAINER_NAME} >/dev/null 2>&1 || true
-                            docker rm ${CONTAINER_NAME} >/dev/null 2>&1 || true
-                            docker run -d --name ${CONTAINER_NAME} -p ${APP_PORT}:5000 ${IMAGE_NAME}:latest
+                            kubectl apply -f deployment.yaml
+                            kubectl apply -f service.yaml
                         '''
                     } else {
                         bat '''
-                            docker stop %CONTAINER_NAME% >nul 2>nul
-                            docker rm %CONTAINER_NAME% >nul 2>nul
-                            docker run -d --name %CONTAINER_NAME% -p %APP_PORT%:5000 %IMAGE_NAME%:latest
+                            kubectl apply -f deployment.yaml
+                            kubectl apply -f service.yaml
                         '''
                     }
-                    echo "Deployment complete. App is available on port ${params.APP_PORT}."
                 }
             }
         }

@@ -11,8 +11,12 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                // This uses the default Git you configured
-                checkout scm
+                // FIXED: Using shallow clone to prevent RPC/Timeout errors
+                checkout([$class: 'GitSCM', 
+                    branches: [[name: '*/main']], 
+                    extensions: [[$class: 'CloneOption', depth: 1, noTags: false, shallow: true]], 
+                    userRemoteConfigs: [[url: 'https://github.com/Hannahdev/devops-project.git']]
+                ])
             }
         }
 
@@ -40,7 +44,7 @@ pipeline {
 
         stage('Deploy to Azure') {
             steps {
-                // Uses the 'azure-ssh-key' with username 'azureuser' from your credentials
+                // Requires the 'SSH Agent' plugin to be installed in Jenkins
                 sshagent(['azure-ssh-key']) {
                     bat """
                         ssh -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && kubectl rollout status deployment/inventory-app"

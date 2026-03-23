@@ -3,14 +3,16 @@ pipeline {
 
     environment {
         DOCKERHUB_REPO = 'hasnaeelmir/inventory-app'
-        VM_IP = "20.199.176.237"
-        VM_USER = "azureuser"
-        PYTHON_PATH = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
+        VM_IP          = "20.199.176.237"
+        VM_USER        = "azureuser"
+        // Ensure this path is correct for your Jenkins node
+        PYTHON_PATH    = "C:\\Users\\dell\\AppData\\Local\\Programs\\Python\\Python313\\python.exe"
     }
 
     stages {
         stage('Checkout') {
             steps {
+                // Standard checkout from the repo linked to the job
                 checkout scm
             }
         }
@@ -28,14 +30,11 @@ pipeline {
         stage('Docker Push') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
-                    bat """
-                        @echo off
-                        :: Login to DockerHub
-                        powershell -Command "\$env:PASS | docker login -u \$env:USER --password-stdin"
-                        
-                        :: Build and Push
-                        docker build -t %DOCKERHUB_REPO%:latest .
-                        docker push %DOCKERHUB_REPO%:latest
+                    // Using powershell for the login to handle the variable safely
+                    powershell """
+                        \$env:PASS | docker login -u \$env:USER --password-stdin
+                        docker build -t ${env.DOCKERHUB_REPO}:latest .
+                        docker push ${env.DOCKERHUB_REPO}:latest
                     """
                 }
             }
@@ -43,22 +42,33 @@ pipeline {
 
         stage('Deploy to Azure') {
             steps {
+                // Uses your 'id_rsa_fixed' uploaded as a Secret File
                 withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
-                    bat """
-                        @echo off
-                        echo --- Fixing Key Permissions via PowerShell ---
+                    powershell """
+                        Write-Host "--- Securing Private Key Permissions ---"
+                        \$keyPath = "${env.KEY_PATH}"
                         
-                        :: Combined PowerShell command into one line to avoid '^' character errors
-                        powershell -Command "\$path = '%KEY_PATH%'; \$acl = Get-Acl \$path; \$acl.SetAccessRuleProtection(\$true, \$false); \$rule = New-Object System.Security.AccessControl.FileSystemAccessRule([System.Security.Principal.WindowsIdentity]::GetCurrent().Name, 'Read', 'Allow'); \$acl.AddAccessRule(\$rule); Set-Acl \$path \$acl"
-
-                        echo --- Connecting to Master VM and Deploying ---
-                        "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && kubectl rollout status deployment/inventory-app"
+                        # 1. Strip all inherited Windows permissions (Users, Everyone, etc.)
+                        \$acl = Get-Acl \$keyPath
+                        \$acl.SetAccessRuleProtection(\$true, \$false)
                         
-                        if %ERRORLEVEL% NEQ 0 (
-                            echo ERROR: Deployment failed. Verify deployment name on VM with 'kubectl get deployments'.
-                            exit /b %ERRORLEVEL%
-                        )
-                        echo --- Deployment Successful ---
+                        # 2. Grant ONLY the current Jenkins service account 'Read' access
+                        \$user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+                        \$rule = New-Object System.Security.AccessControl.FileSystemAccessRule(\$user, 'Read', 'Allow')
+                        \$acl.AddAccessRule(\$rule)
+                        
+                        # 3. Apply the ACL so OpenSSH accepts it as a private key
+                        Set-Acl \$keyPath \$acl
+                        
+                        Write-Host "--- Connecting to Master VM: ${env.VM_IP} ---"
+                        # Execute the deployment command on the remote VM
+                        & C:\\Windows\\System32\\OpenSSH\\ssh.exe -i \$keyPath -o StrictHostKeyChecking=no ${env.VM_USER}@${env.VM_IP} "kubectl set image deployment/inventory-app inventory-app=${env.DOCKERHUB_REPO}:latest && kubectl rollout status deployment/inventory-app"
+                        
+                        if (\$LASTEXITCODE -ne 0) { 
+                            Write-Error "Deployment failed on the remote VM."
+                            exit 1
+                        }
+                        Write-Host "--- Deployment Successful ---"
                     """
                 }
             }
@@ -67,6 +77,7 @@ pipeline {
 
     post {
         always {
+            // Clean up the workspace to ensure the next build starts fresh
             cleanWs()
         }
     }

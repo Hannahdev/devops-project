@@ -45,22 +45,22 @@ pipeline {
         }
 
         stage('Deploy to Azure') {
-            steps {
-                // Ensure 'azure-ssh-key-file' is created in Jenkins Credentials as a 'Secret File'
-                withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
-                    bat """
-                        @echo off
-                        echo --- Deploying to Azure VM ---
-                        "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% ^
-                        "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && ^
-                         kubectl rollout status deployment/inventory-app"
-                        
-                        if %ERRORLEVEL% NEQ 0 (
-                            echo ERROR: Deployment failed.
-                            exit /b %ERRORLEVEL%
-                        )
-                        echo --- Deployment Successful ---
-                    """
+    steps {
+        withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
+            bat """
+                @echo on
+                echo [DEBUG] Current User: %USERNAME%
+                echo [DEBUG] Key Path: %KEY_PATH%
+                echo [DEBUG] Target VM: %VM_USER%@%VM_IP%
+
+                :: Use -vvv to get the most detailed SSH logs possible
+                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -vvv -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && kubectl rollout status deployment/inventory-app" 2>&1
+
+                if %ERRORLEVEL% NEQ 0 (
+                    echo [DEBUG] SSH failed with Exit Code: %ERRORLEVEL%
+                    exit /b %ERRORLEVEL%
+                )
+            """
                 }
             }
         }

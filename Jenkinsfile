@@ -45,34 +45,27 @@ pipeline {
         }
 
         stage('Deploy to Azure') {
-    steps {
-        withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
-            bat """
-                @echo off
-                echo --- Checking for SSH executable ---
-                if not exist "C:\\Windows\\System32\\OpenSSH\\ssh.exe" (
-                    echo ERROR: SSH.exe not found at C:\\Windows\\System32\\OpenSSH\\
-                    exit /b 1
-                )
-
-                echo --- Starting Deployment ---
-                :: Use the absolute path to bypass PATH issues
-                "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% ^
-                "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && ^
-                 kubectl rollout status deployment/inventory-app"
-                
-                if %ERRORLEVEL% NEQ 0 (
-                    echo Deployment failed with error code %ERRORLEVEL%
-                    exit /b %ERRORLEVEL%
-                )
-                echo --- Deployment Successful ---
-            """
-        }
+            steps {
+                // Ensure 'azure-ssh-key-file' is created in Jenkins Credentials as a 'Secret File'
+                withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
+                    bat """
+                        @echo off
+                        echo --- Deploying to Azure VM ---
+                        "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% ^
+                        "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && ^
+                         kubectl rollout status deployment/inventory-app"
+                        
+                        if %ERRORLEVEL% NEQ 0 (
+                            echo ERROR: Deployment failed.
+                            exit /b %ERRORLEVEL%
+                        )
+                        echo --- Deployment Successful ---
+                    """
                 }
             }
         }
     }
-    
+
     post {
         always {
             cleanWs()

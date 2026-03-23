@@ -46,19 +46,21 @@ pipeline {
 
         stage('Deploy to Azure') {
     steps {
-        // This matches the ID you just created
         withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
             bat """
                 @echo off
-                echo --- Deploying to Azure VM ---
-                
-                :: Use the absolute path to OpenSSH
+                echo --- Fixing Local Key Permissions ---
+                icacls "%KEY_PATH%" /inheritance:r
+                icacls "%KEY_PATH%" /grant:r "%USERNAME%":"(R)"
+
+                echo --- Connecting to Master VM and Deploying ---
+                :: We connect to the Master VM and run the kubectl command directly
                 "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% ^
                 "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && ^
                  kubectl rollout status deployment/inventory-app"
                 
                 if %ERRORLEVEL% NEQ 0 (
-                    echo ERROR: Deployment failed. Check VM connectivity or kubectl permissions.
+                    echo ERROR: Deployment failed.
                     exit /b %ERRORLEVEL%
                 )
                 echo --- Deployment Successful ---

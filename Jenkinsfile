@@ -49,18 +49,22 @@ pipeline {
         withCredentials([file(credentialsId: 'azure-ssh-key-file', variable: 'KEY_PATH')]) {
             bat """
                 @echo off
-                echo --- Fixing Local Key Permissions ---
+                echo --- Fixing Key Permissions for System Service ---
+                
+                :: 1. Reset and remove inheritance
                 icacls "%KEY_PATH%" /inheritance:r
-                icacls "%KEY_PATH%" /grant:r "%USERNAME%":"(R)"
-
-                echo --- Connecting to Master VM and Deploying ---
-                :: We connect to the Master VM and run the kubectl command directly
+                
+                :: 2. Grant Read access to 'Everyone' using the universal SID
+                :: This ensures the Jenkins service account can read it
+                icacls "%KEY_PATH%" /grant *S-1-1-0:(R)
+                
+                echo --- Connecting to Master VM ---
                 "C:\\Windows\\System32\\OpenSSH\\ssh.exe" -i "%KEY_PATH%" -o StrictHostKeyChecking=no %VM_USER%@%VM_IP% ^
                 "kubectl set image deployment/inventory-app inventory-app=%DOCKERHUB_REPO%:latest && ^
                  kubectl rollout status deployment/inventory-app"
                 
                 if %ERRORLEVEL% NEQ 0 (
-                    echo ERROR: Deployment failed.
+                    echo ERROR: Deployment failed. Check VM kubectl status.
                     exit /b %ERRORLEVEL%
                 )
                 echo --- Deployment Successful ---

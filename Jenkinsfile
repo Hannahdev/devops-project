@@ -39,7 +39,10 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials1', usernameVariable: 'USER', passwordVariable: 'PASS')]) {
                     powershell """
                         \$env:PASS | docker login -u \$env:USER --password-stdin
-                        docker build -t ${env.DOCKERHUB_REPO}:latest .
+                        
+                        # AJOUT DE --no-cache ICI POUR FORCER L'ACTUALISATION DE TON HTML
+                        docker build --no-cache -t ${env.DOCKERHUB_REPO}:latest .
+                        
                         docker push ${env.DOCKERHUB_REPO}:latest
                     """
                 }

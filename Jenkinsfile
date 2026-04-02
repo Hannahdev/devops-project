@@ -65,9 +65,9 @@ pipeline {
                         
                         # Commande avec le nom de l'image ecrit en dur pour eviter les bugs de variables
                         & C:\\Windows\\System32\\OpenSSH\\ssh.exe -i \$keyPath -o StrictHostKeyChecking=no -o ServerAliveInterval=30 ${env.VM_USER}@${env.VM_IP} "
-                            kubectl apply -f service.yaml && \
-                            kubectl set image deployment/inventory-app inventory-app=hasnaeelmir/inventory-app:latest && \
-                            kubectl rollout status deployment/inventory-app
+                            kubectl apply -f deployment.yaml && \
+kubectl apply -f service.yaml && \
+kubectl rollout status deployment/inventory-app
                         "
                         
                         if (\$LASTEXITCODE -ne 0) { 

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: inventory-app
-        image: hasnaeelmir/inventory-app:latest   
+        image: hasnaeelmir/inventory-app:v2   # <-- Le tag passe en v2
         imagePullPolicy: Always                  
         ports:
         - containerPort: 5000

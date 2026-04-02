@@ -40,10 +40,10 @@ pipeline {
                     powershell """
                         \$env:PASS | docker login -u \$env:USER --password-stdin
                         
-                        # AJOUT DE --no-cache ICI POUR FORCER L'ACTUALISATION DE TON HTML
-                        docker build --no-cache -t ${env.DOCKERHUB_REPO}:latest .
+                        # Changement du tag en v2 pour bypasser le cache
+                        docker build --no-cache -t ${env.DOCKERHUB_REPO}:v2 .
                         
-                        docker push ${env.DOCKERHUB_REPO}:latest
+                        docker push ${env.DOCKERHUB_REPO}:v2
                     """
                 }
             }
@@ -66,7 +66,6 @@ pipeline {
                         
                         Write-Host "--- Connecting to Master VM and Applying Changes ---"
                         
-                        # Commande avec le nom de l'image ecrit en dur pour eviter les bugs de variables
                         & C:\\Windows\\System32\\OpenSSH\\ssh.exe -i \$keyPath -o StrictHostKeyChecking=no -o ServerAliveInterval=30 ${env.VM_USER}@${env.VM_IP} "
                             kubectl apply -f deployment.yaml && \
                             kubectl apply -f service.yaml && \

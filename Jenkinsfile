@@ -63,9 +63,12 @@ pipeline {
                         
                         Write-Host "--- Connecting to Master VM and Applying Changes ---"
                         
+                        # Recuperation securisee de la variable Jenkins dans PowerShell
+                        $dockerRepo = $env:DOCKERHUB_REPO
+                        
                         & C:\\Windows\\System32\\OpenSSH\\ssh.exe -i "$keyPath" -o StrictHostKeyChecking=no -o ServerAliveInterval=30 $env:VM_USER@$env:VM_IP "
                             kubectl apply -f service.yaml && \
-                            kubectl set image deployment/inventory-app inventory-app=$env:DOCKERHUB_REPO:latest && \
+                            kubectl set image deployment/inventory-app inventory-app=${dockerRepo}:latest && \
                             kubectl rollout status deployment/inventory-app
                         "
                         

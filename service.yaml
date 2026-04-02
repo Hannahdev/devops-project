@@ -7,7 +7,7 @@ spec:
   selector:
     app: inventory-app
   ports:
-    - name: http                 # 🔥 good practice
+    - name: http               
       protocol: TCP
       port: 80                  # external service port
       targetPort: 5000          # your app container port

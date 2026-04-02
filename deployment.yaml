@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: inventory-app
-        image: hasnaeelmir/inventory-app:latest   # ✅ FIXED
-        imagePullPolicy: Always                  # 🔥 IMPORTANT
+        image: hasnaeelmir/inventory-app:latest   
+        imagePullPolicy: Always                  
         ports:
         - containerPort: 5000

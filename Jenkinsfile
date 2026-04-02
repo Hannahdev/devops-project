@@ -67,6 +67,7 @@ pipeline {
                         & C:\\Windows\\System32\\OpenSSH\\ssh.exe -i \$keyPath -o StrictHostKeyChecking=no -o ServerAliveInterval=30 ${env.VM_USER}@${env.VM_IP} "
                             kubectl apply -f deployment.yaml && \
                             kubectl apply -f service.yaml && \
+                            kubectl rollout restart deployment/inventory-app && \
                             kubectl rollout status deployment/inventory-app
                         "
                         
